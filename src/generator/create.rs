@@ -1,13 +1,14 @@
 use std::path::Path;
 
-mod util;
+use crate::util;
+use crate::generator::manager::ContainerManager;
 
-pub struct ContainerCreateArgs<'a> {
-    pub manager: util::ContainerManager,
+pub struct CreateArgs<'a> {
+    pub manager: ContainerManager,
+    pub image: &'a str,
     pub name: &'a str,
     pub hostname: &'a str,
     pub home: &'a str,
-    pub home_prefix: bool,
 
     pub unshare_ipc: bool,
     pub unshare_netns: bool,
@@ -18,18 +19,15 @@ pub struct ContainerCreateArgs<'a> {
     pub rootful: bool,
 
     pub mount_host: bool,
+    pub extra_env: Vec<(&'a str, &'a str)>,
 }
 
-// this function is pure, as in it does not modify the filesystem
-pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<String>, String> {
-    let manager_exe = container.manager.executable();
-
-    // let mut cmd: Args = Default::default();
+pub fn generate_create_command(container: &CreateArgs) -> Result<Vec<String>, String> {
     let mut cmd: Vec<String> = vec![];
 
     // TODO check name, hostname length
 
-    cmd.extend([manager_exe.into(), "create".into(),
+    cmd.extend(["create".into(),
         "--name".into(), container.name.into(),
         "--hostname".into(), container.hostname.into(),
         "--privileged".into(),
@@ -50,13 +48,16 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
         cmd.extend(["--pid".into(), "host".into()]);
     }
 
-    // TODO do i need to set SHELL when creating seems like a bad idea?
+    let host_home_path = dirs::home_dir().expect("cannot get host HOME dir");
+    let host_home = host_home_path.to_str().unwrap();
+    cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
+
     cmd.extend([
         // information about the manager, kinda compatible with distrobox
         "--label".into(), "manager=legumemanager".into(),
         "--env".into(), format!("manager_version={}",  util::VERSION),
         "--env".into(), format!("manager_version_str={}",  util::VERSION_STR),
-        "--env".into(), format!("container={}", manager_exe),
+        "--env".into(), format!("container={}", container.manager.executable()),
 
         // im adding /bin/sh as default shell but will override it later
         "--env".into(), "SHELL=/bin/sh".into(),
@@ -64,7 +65,7 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
 
         // use host terminfo as fallback, useful for modern terminals like kitty
         "--env".into(), "TERMINFO_DIRS=/usr/share/terminfo:/usr/share/terminfo-host".into(),
-        "--volume".into(), "/usr/share/terminfo:/usr/share/terminfo-host:rslave".into(),
+        "--volume".into(), "/usr/share/terminfo:/usr/share/terminfo-host:ro".into(),
 
         "--volume".into(), format!("{0}:{0}:rslave", container.home),
         "--volume".into(), "/tmp:/tmp:rslave".into(),
@@ -72,21 +73,10 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
 
     // TODO mount /var/home/xxx for ostree systems
 
-    if container.home_prefix {
-        // if its a prefix set HOME_HOST to host home directory
-        let host_home_path = dirs::home_dir().expect("cannot get host HOME dir");
-        let host_home = host_home_path.to_str().unwrap();
-        cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
-    } else {
-        // keep HOME_HOST defined but same value as HOME
-        cmd.extend(["--env".into(), format!("HOME_HOST={}", container.home)]);
-    }
-
     if container.mount_host {
         cmd.extend(["--volume".into(), "/:/run/host:rslave".into()]);
     }
 
-    // NOTE: im not gonna mount the legumemanager executable as it may be moved
     if !container.unshare_devsys {
         cmd.extend([
             "--volume".into(), "/dev:/dev:rslave".into(),
@@ -97,10 +87,10 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
     // things for systemd
     if container.init {
         match container.manager {
-            util::ContainerManager::Docker => {
+            ContainerManager::Docker => {
                 cmd.push("--cgroupns".into());
             },
-            util::ContainerManager::Podman => {
+            ContainerManager::Podman => {
                 cmd.extend([
                    "--stop-signal".into(), "SIGRTMIN+3".into(),
                    "--mount".into(), "type=tmpfs,destination=/run".into(),
@@ -161,6 +151,8 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
     }
 
     // TODO i think there is a better way than just making these immutable
+    // TODO try editing when copying from host and editing a part, maybe also put some marker where
+    // user can edit whatever they want and it wont be overwritten
     if !container.unshare_netns {
         for file in ["/etc/hosts", "/etc/resolv.conf"] {
             if Path::new(file).exists() {
@@ -171,7 +163,7 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
         }
     }
 
-    if container.manager == util::ContainerManager::Podman {
+    if container.manager == ContainerManager::Podman {
         cmd.extend([
            "--ulimit".into(), "host".into(),
            "--annotation".into(), "run.oci.keep_original_groups=1".into(),
@@ -188,11 +180,19 @@ pub fn generate_create_command(container: &ContainerCreateArgs) -> Result<Vec<St
         }
     }
 
+    for (key, val) in &container.extra_env {
+        cmd.extend([
+            "--env".into(), format!("{}={}", key, val),
+        ]);
+    }
+
     // im guessing this is the thing that gets called when the container starts
     // i want to support `podman start <container>` too for use with ansible
     cmd.extend([
-       "--entrypoint".into(), "/usr/bin/entrypoint".into(),
+       "--entrypoint".into(), "/bin/sh".into(),
+       container.image.into(),
     ]);
 
     Ok(cmd)
 }
+
