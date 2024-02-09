@@ -1,4 +1,4 @@
-use crate::generator::manager::ContainerManager;
+use crate::cli_host::cli::ContainerManager;
 
 pub struct EnterArgs<'a> {
     pub manager: ContainerManager,

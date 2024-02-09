@@ -1,84 +1,32 @@
 mod util;
-mod generator;
-mod cli;
-mod container_cli;
+mod cli_host;
+mod cli_container;
 
-use std::process::Command;
 use std::path::Path;
-use clap::Parser;
+
+pub const VERSION: &'static str = concat!(env!("CARGO_PKG_VERSION_MAJOR"), env!("CARGO_PKG_VERSION_MINOR"), env!("CARGO_PKG_VERSION_PATCH"));
+pub const VERSION_STR: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
-    // TODO im not sure 'LM_FORCE_HOST' should exist, but im keeping it for testing for now
-    let force_host = std::env::var("LM_FORCE_HOST").is_ok();
-    if force_host {
-        println!("WARNING: LM_FORCE_HOST env variable is meant only for testing\n");
-    }
+    let force_host = if cfg!(debug_assertions) {
+        let value = std::env::var("LM_FORCE_HOST").is_ok();
+
+        if value {
+            println!("WARNING: LM_FORCE_HOST env variable is only available in debug builds\n");
+        }
+
+        value
+    } else {
+        false
+    };
 
     if (Path::new("/run/.containerenv").exists()
         || Path::new("/.dockerenv").exists()
         || std::env::var("container").is_ok())
         && !force_host {
         // running in a container
-        container_cli::main_cli_container();
+        cli_container::main();
     } else {
-        cli::main_cli();
+        cli_host::main();
     }
-
-    // let args = cli::Cli::parse();
-    //
-    // use clap::CommandFactory;
-    // cli::Cli::command().debug_assert()
-    // match &cli.command {
-    //     Commands::Add { name } => {
-    //         println!("'myapp add' was used, name is: {name:?}")
-    //     }
-    // }
-
-    // for i in args {
-    //     println!("'{}'", i);
-    // }
-
-
-    // let create_args = CreateArgs {
-    //     manager: util::ContainerManager::Podman,
-    //     image: "archlinux:latest",
-    //     name: "test-container",
-    //     hostname: "test-container.localhost",
-    //     home: "/home/sandorex/.dbx/test-container",
-    //     unshare_ipc: false,
-    //     unshare_netns: false,
-    //     unshare_process: false,
-    //     unshare_devsys: false,
-    //     init: false,
-    //     rootful: false,
-    //     mount_host: true,
-    //     extra_env: vec![],
-    // };
-    // let enter_args = EnterArgs {
-    //     manager: util::ContainerManager::Podman,
-    //     name: "f39",
-    //     home: "/home/sandorex",
-    //     headless: false,
-    //     workdir: None,
-    //     extra_env: vec![],
-    //     command: None,
-    // };
-    //
-    // // let podman_args = generate_create_command(&create_args).unwrap();
-    // let podman_args = generate_enter_command(&enter_args).unwrap();
-    //
-    // for i in podman_args {
-    //     print!(" {}", i);
-    // }
-
-    // let command = Command::new("podman")
-    //     .args(podman_args)
-    //     .output()
-    //     .expect("failed to execute podman");
-
-    // println!("status: {}", command.status.code().unwrap_or(0));
-    //
-    // let command_output = String::from_utf8(command.stdout).unwrap();
-    //
-    // println!("{}", command_output);
 }
