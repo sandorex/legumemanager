@@ -1,3 +1,5 @@
+/// Contains cli interface available on host machine
+
 use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
@@ -14,8 +16,27 @@ pub struct Cli {
     #[arg(long)]
     root: bool,
 
+    /// Specify which container manager to use
+    #[arg(long, value_enum, default_value_t = ContainerManagerOptions::Auto)]
+    manager: ContainerManagerOptions,
+
     #[command(subcommand)]
     pub cmd: CliCommands,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
+pub enum ContainerManagerOptions {
+    /// Automatically find the container manager
+    Auto,
+
+    /// Use podman
+    Podman,
+
+    /// Use docker
+    Docker,
+
+    /// Use Lilypod
+    Lilypod,
 }
 
 #[derive(Subcommand, Debug)]
@@ -66,10 +87,10 @@ pub enum CliCommands {
         manager_args: Vec<String>,
     },
 
-    /// Enter a container
+    /// Execute shell in a container
     #[command(arg_required_else_help = true)]
-    #[clap(visible_alias = "shell")]
-    Enter {
+    #[clap(visible_alias = "enter")]
+    Shell {
         /// Name of the container
         container_name: String,
 
@@ -100,7 +121,6 @@ pub enum CliCommands {
         /// Name of the container
         container_name: String,
 
-        // TODO test if this actually gather everything including arguments
         /// Command to execute
         command: Vec<String>,
 
@@ -159,14 +179,14 @@ pub enum CliCommands {
 
     /// Special commands for use with ansible
     #[command(subcommand)]
-    Ansible(AnsibleCommands)
+    Ansible(AnsibleCommands),
 }
 
 #[derive(Subcommand, Debug)]
 pub enum AnsibleCommands {
     /// Setup minimum requirements for running ansible inside the container
     #[command(arg_required_else_help = true)]
-    Init {
+    Initialize {
         /// Name of the container
         container_name: String,
 
@@ -211,5 +231,23 @@ pub enum AnsibleCommands {
         /// Destination in the container
         destination: PathBuf,
     },
+}
+
+pub fn main_cli() {
+    let args = Cli::parse();
+
+    // TODO get container manager
+
+    // match args.cmd {
+    //     CliCommands::Create { container_name, image, hostname, mount_host, unshare_ipc, unshare_netns, unshare_process, unshare_devsys, init, env, manager_args } => {
+    //         let cmd_args = CreateArgs {
+    //
+    //         };
+    //     },
+    //     _ => {},
+    // }
+
+    use clap::CommandFactory;
+    Cli::command().debug_assert()
 }
 

@@ -1,15 +1,33 @@
 mod util;
 mod generator;
 mod cli;
+mod container_cli;
 
 use std::process::Command;
+use std::path::Path;
 use clap::Parser;
 
 fn main() {
-    let args = cli::Cli::parse();
+    // TODO im not sure 'LM_FORCE_HOST' should exist, but im keeping it for testing for now
+    let force_host = std::env::var("LM_FORCE_HOST").is_ok();
+    if force_host {
+        println!("WARNING: LM_FORCE_HOST env variable is meant only for testing\n");
+    }
 
-    use clap::CommandFactory;
-    cli::Cli::command().debug_assert()
+    if (Path::new("/run/.containerenv").exists()
+        || Path::new("/.dockerenv").exists()
+        || std::env::var("container").is_ok())
+        && !force_host {
+        // running in a container
+        container_cli::main_cli_container();
+    } else {
+        cli::main_cli();
+    }
+
+    // let args = cli::Cli::parse();
+    //
+    // use clap::CommandFactory;
+    // cli::Cli::command().debug_assert()
     // match &cli.command {
     //     Commands::Add { name } => {
     //         println!("'myapp add' was used, name is: {name:?}")
