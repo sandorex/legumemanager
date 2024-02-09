@@ -101,7 +101,7 @@ pub enum CliCommands {
     Ansible(AnsibleCommands),
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdCreateArgs {
     /// Name of the new container
     pub container_name: String,
@@ -154,7 +154,7 @@ pub struct CmdCreateArgs {
     pub extra_args: Vec<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdExecArgs {
     /// Name of the container
     pub container_name: String,
@@ -179,7 +179,7 @@ pub struct CmdExecArgs {
     pub extra_args: Vec<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdShellArgs {
     /// Name of the container
     pub container_name: String,
@@ -205,20 +205,20 @@ pub struct CmdShellArgs {
     pub extra_args: Vec<String>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdListArgs{
     /// Show only running containers
     #[arg(long)]
     pub running: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdStartArgs{
     /// Name of the container
     pub container_name: String,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdStopArgs {
     /// Name of the container
     pub container_name: String,
@@ -228,7 +228,7 @@ pub struct CmdStopArgs {
     pub force: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct CmdDestroyArgs {
     /// Name of the container
     pub container_name: String,

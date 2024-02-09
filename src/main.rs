@@ -1,6 +1,7 @@
 mod util;
 mod cli_host;
 mod cli_container;
+mod env_vars;
 
 use std::path::Path;
 
@@ -9,7 +10,7 @@ pub const VERSION_STR: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let force_host = if cfg!(debug_assertions) {
-        let value = std::env::var("LM_FORCE_HOST").is_ok();
+        let value = std::env::var(env_vars::LM_FORCE_HOST).is_ok();
 
         if value {
             println!("WARNING: LM_FORCE_HOST env variable is only available in debug builds\n");

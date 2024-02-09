@@ -1,21 +1,27 @@
 use std::path::Path;
-use crate::{VERSION_STR, VERSION};
+use crate::{env_vars, VERSION, VERSION_STR};
 use crate::cli_host::cli::{Cli, CmdCreateArgs, ContainerManager};
 
-fn generate_create_command(manager: ContainerManager, root: bool, absolute_home: String, args: &CmdCreateArgs) -> Result<Vec<String>, String> {
+/// This is the default prefix, will be appended to actual host home
+const DEFAULT_HOME_PREFIX: &'static str = ".lm";
+
+fn generate_create_command(args: &Cli, cmd_args: CmdCreateArgs) -> Result<Vec<String>, String> {
     let mut cmd: Vec<String> = vec![];
 
-    // TODO check name, hostname length
+    let home = cmd_args.home.unwrap();
+    let hostname = cmd_args.hostname.unwrap();
+    let manager = args.manager.unwrap();
 
-    // get hostname but default to container_name
-    let hostname = if let Some(hostname) = &args.hostname {
-        hostname.clone()
-    } else {
-        gethostname::gethostname().into_string().unwrap()
-    };
+    if hostname.len() > 255 {
+        return Err("hostname length is over 255 characters".into());
+    }
+
+    if cmd_args.container_name.len() > 64 {
+        return Err("container name is over 64 characters".into());
+    }
 
     cmd.extend(["create".into(),
-        "--name".into(), args.container_name.clone(),
+        "--name".into(), cmd_args.container_name.clone(),
         "--hostname".into(), hostname,
         "--privileged".into(),
         "--security-opt".into(), "label=disable".into(),
@@ -23,15 +29,15 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
         "--user".into(), "root:root".into(),
     ]);
 
-    if !args.unshare_ipc {
+    if !cmd_args.unshare_ipc {
         cmd.extend(["--ipc".into(), "host".into()]);
     }
 
-    if !args.unshare_netns {
+    if !cmd_args.unshare_netns {
         cmd.extend(["--network".into(), "host".into()]);
     }
 
-    if !args.unshare_process {
+    if !cmd_args.unshare_process {
         cmd.extend(["--pid".into(), "host".into()]);
     }
 
@@ -44,19 +50,19 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
 
         // im adding /bin/sh as default shell but will override it later
         "--env".into(), "SHELL=/bin/sh".into(),
-        "--env".into(), format!("HOME={}", absolute_home),
+        "--env".into(), format!("HOME={}", home),
 
         // use host terminfo as fallback, useful for modern terminals like kitty
         "--env".into(), "TERMINFO_DIRS=/usr/share/terminfo:/usr/share/terminfo-host".into(),
         "--volume".into(), "/usr/share/terminfo:/usr/share/terminfo-host:ro".into(),
 
-        "--volume".into(), format!("{0}:{0}:rslave", absolute_home),
+        "--volume".into(), format!("{0}:{0}:rslave", home),
         "--volume".into(), "/tmp:/tmp:rslave".into(),
     ]);
 
     // TODO mount /var/home/xxx for ostree systems
 
-    if args.mount_host {
+    if cmd_args.mount_host {
         cmd.extend(["--volume".into(), "/:/run/host:rslave".into()]);
 
         // TODO make HOME_HOST be /run/host/home/... so it works always
@@ -66,7 +72,7 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
         cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
     }
 
-    if !args.unshare_devsys {
+    if !cmd_args.unshare_devsys {
         cmd.extend([
             "--volume".into(), "/dev:/dev:rslave".into(),
             "--volume".into(), "/sys:/sys:rslave".into(),
@@ -74,7 +80,7 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
     }
 
     // things for systemd
-    if args.init {
+    if cmd_args.init {
         match manager {
             ContainerManager::Docker => {
                 cmd.push("--cgroupns".into());
@@ -91,7 +97,7 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
         }
     }
 
-    if !args.unshare_devsys {
+    if !cmd_args.unshare_devsys {
         cmd.extend([
             "--volume".into(), "/dev/pts".into(),
             "--volume".into(), "/dev/null:/dev/ptmx".into(),
@@ -107,7 +113,7 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
     cmd.extend(["--volume".into(), "/var/log/journal".into()]);
 
     let shm = Path::new("/dev/shm");
-    if shm.is_symlink() && !args.unshare_ipc {
+    if shm.is_symlink() && !cmd_args.unshare_ipc {
         let link_target = shm.read_link().expect("failed to read /dev/shm link");
         cmd.extend([
             "--volume".into(), format!("{target}:{target}", target=link_target.to_str().unwrap())
@@ -133,7 +139,7 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
     let user_id = users::get_current_uid();
     let user_xdg_runtime_path = format!("/run/user/{}", user_id);
 
-    if Path::new(&user_xdg_runtime_path).exists() && !args.init {
+    if Path::new(&user_xdg_runtime_path).exists() && !cmd_args.init {
         cmd.extend([
             "--volume".into(), format!("{0}:{0}:rslave", user_xdg_runtime_path),
         ])
@@ -142,7 +148,7 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
     // TODO i think there is a better way than just making these immutable
     // TODO try editing when copying from host and editing a part, maybe also put some marker where
     // user can edit whatever they want and it wont be overwritten
-    if !args.unshare_netns {
+    if !cmd_args.unshare_netns {
         for file in ["/etc/hosts", "/etc/resolv.conf"] {
             if Path::new(file).exists() {
                 cmd.extend([
@@ -158,11 +164,11 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
            "--annotation".into(), "run.oci.keep_original_groups=1".into(),
         ]);
 
-        if args.init {
+        if cmd_args.init {
             cmd.push("--systemd=always".into());
         }
 
-        if !root {
+        if !args.root {
             cmd.extend([
                "--userns".into(), "keep-id".into(),
             ]);
@@ -170,32 +176,71 @@ fn generate_create_command(manager: ContainerManager, root: bool, absolute_home:
     }
 
     // add additional env values, i wont check for errors here i dont care
-    for i in &args.env {
+    for i in &cmd_args.env {
         cmd.extend([
             "--env".into(), i.into(),
         ]);
     }
 
     // add additional flags
-    cmd.extend(args.extra_args.clone());
+    cmd.extend(cmd_args.extra_args.clone());
 
     // im guessing this is the thing that gets called when the container starts
     // i want to support `podman start <container>` too for use with ansible
     cmd.extend([
-       "--entrypoint".into(), "/bin/sh".into(),
-       args.image.clone().into(),
+        // TODO run login shell
+        "--entrypoint".into(), "/bin/sh".into(),
+        cmd_args.image.clone().into(),
     ]);
 
     Ok(cmd)
 }
 
-pub fn cmd_create(args: &Cli, cmd_args: &CmdCreateArgs) {
-    // TODO
-    // check if container already exists
-    // check if directory at home already exists and warn the user
-    // check if
+pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) {
+    // TODO check if container already exists
 
-    let output = generate_create_command(args.manager.unwrap(), args.root, "aa".into(), cmd_args);
+    // hostname defaults to host's hostname
+    if cmd_args.hostname.is_none() {
+        cmd_args.hostname = Some(gethostname::gethostname().into_string().unwrap());
+    }
+
+    // set home properly
+    if let Some(home) = &cmd_args.home {
+        if cmd_args.home_prefix {
+            // treat --home as the prefix
+            let new_home = Path::new(&home).join(&cmd_args.container_name);
+            cmd_args.home = Some(new_home.to_str().unwrap().into());
+        }
+    } else {
+        // home not set explicitly
+        let mut new_home = dirs::home_dir().expect("failed to get home directory");
+
+        // if home prefix then use the default
+        if cmd_args.home_prefix {
+            // place it in ~/<PREFIX>/<CONTAINER_NAME>
+            // NOTE: if prefix is absolute path then it will overwrite the home
+            new_home.push(std::env::var(env_vars::LM_HOME_PREFIX).unwrap_or(DEFAULT_HOME_PREFIX.into()));
+            new_home.push(&cmd_args.container_name);
+        }
+
+        cmd_args.home = Some(new_home.to_str().unwrap().into());
+    }
+
+    if args.verbose >= 2 {
+        println!("HOME: {}", cmd_args.home.as_ref().unwrap());
+    }
+
+    let home_path = Path::new(cmd_args.home.as_ref().unwrap());
+    if home_path.exists() {
+        if args.verbose >= 1 {
+            println!("Warning: home directory already exists at {} already exists", cmd_args.home.as_ref().unwrap())
+        }
+    } else {
+        // create the home path
+        std::fs::create_dir(home_path).expect("cannot create a directory");
+    }
+
+    let output = generate_create_command(args, cmd_args);
 
     for i in output.expect("failed to generate create command") {
         print!(" {}", i);
