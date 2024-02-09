@@ -1,3 +1,7 @@
+//! Module that contains create command
+
+use std::io::{self, Write};
+use std::process::Command;
 use std::path::Path;
 use crate::{env_vars, VERSION, VERSION_STR};
 use crate::cli_host::cli::{Cli, CmdCreateArgs, ContainerManager};
@@ -5,11 +9,11 @@ use crate::cli_host::cli::{Cli, CmdCreateArgs, ContainerManager};
 /// This is the default prefix, will be appended to actual host home
 const DEFAULT_HOME_PREFIX: &'static str = ".lm";
 
-fn generate_create_command(args: &Cli, cmd_args: CmdCreateArgs) -> Result<Vec<String>, String> {
+fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<String>, String> {
     let mut cmd: Vec<String> = vec![];
 
-    let home = cmd_args.home.unwrap();
-    let hostname = cmd_args.hostname.unwrap();
+    let home = cmd_args.home.as_ref().unwrap();
+    let hostname = cmd_args.hostname.as_ref().unwrap();
     let manager = args.manager.unwrap();
 
     if hostname.len() > 255 {
@@ -22,7 +26,7 @@ fn generate_create_command(args: &Cli, cmd_args: CmdCreateArgs) -> Result<Vec<St
 
     cmd.extend(["create".into(),
         "--name".into(), cmd_args.container_name.clone(),
-        "--hostname".into(), hostname,
+        "--hostname".into(), hostname.clone(),
         "--privileged".into(),
         "--security-opt".into(), "label=disable".into(),
         "--security-opt".into(), "apparmor=unconfined".into(),
@@ -231,19 +235,32 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) {
     }
 
     let home_path = Path::new(cmd_args.home.as_ref().unwrap());
-    if home_path.exists() {
-        if args.verbose >= 1 {
-            println!("Warning: home directory already exists at {} already exists", cmd_args.home.as_ref().unwrap())
-        }
-    } else {
+    if !home_path.exists() {
         // create the home path
         std::fs::create_dir(home_path).expect("cannot create a directory");
     }
 
-    let output = generate_create_command(args, cmd_args);
+    let output = generate_create_command(args, &cmd_args).expect("failed to generate podman create command");
 
-    for i in output.expect("failed to generate create command") {
-        print!(" {}", i);
+    if args.verbose >= 1 {
+        println!("Creating container {}", &cmd_args.container_name);
+    }
+
+    let command = Command::new(args.manager.unwrap().get_executable_name())
+        .args(output)
+        .output()
+        .expect("failed to execute container manager");
+
+    if command.status.success() {
+        if args.verbose >= 1 {
+            println!("Container successfully created");
+        }
+    } else {
+        // TODO write the error a bit more nicer
+        println!("Container creation failed:");
+        io::stdout().write_all(&command.stdout).unwrap();
+        println!();
+        io::stderr().write_all(&command.stderr).unwrap();
     }
 }
 

@@ -1,4 +1,4 @@
-/// File containing names of every environment variable used in legumemanager
+//! File containing names of every environment variable used in legumemanager
 
 /// Development only flag to force host mode in a container
 #[cfg(debug_assertions)]

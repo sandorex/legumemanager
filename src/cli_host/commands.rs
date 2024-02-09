@@ -1,5 +1,5 @@
 pub mod create;
-pub mod enter;
+pub mod shell;
 
 pub use create::cmd_create;
 

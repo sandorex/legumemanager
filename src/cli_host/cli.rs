@@ -168,7 +168,7 @@ pub struct CmdExecArgs {
 
     /// Set current working directory in the container
     #[arg(short, long)]
-    pub workdir: String,
+    pub workdir: Option<String>,
 
     /// Define extra environment variables in container (eg. 'MY_VAR=value')
     #[arg(short, long)]
