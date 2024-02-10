@@ -5,12 +5,9 @@ use std::path::Path;
 use crate::cli_host::util;
 use crate::{env_vars, VERSION, VERSION_STR};
 use crate::cli_host::cli::{Cli, CmdCreateArgs, ContainerManager};
-use anyhow::{Error, Result};
+use crate::{Error, Result, Context};
 
-/// This is the default prefix, will be appended to actual host home
-const DEFAULT_HOME_PREFIX: &'static str = ".lm";
-
-fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<String>, String> {
+fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<String>> {
     let mut cmd: Vec<String> = vec![];
 
     let home = cmd_args.home.as_ref().unwrap();
@@ -18,11 +15,11 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
     let manager = args.manager.unwrap();
 
     if hostname.len() > 255 {
-        return Err("hostname length is over 255 characters".into());
+        return Err(Error::msg("hostname length is over 255 characters"));
     }
 
     if cmd_args.container_name.len() > 64 {
-        return Err("container name is over 64 characters".into());
+        return Err(Error::msg("container name is over 64 characters"));
     }
 
     cmd.extend(["create".into(),
@@ -72,7 +69,7 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
 
         // TODO make HOME_HOST be /run/host/home/... so it works always
         // HOME_HOST is gonna be undefined if host is not mounted
-        let host_home_path = dirs::home_dir().expect("cannot get host HOME dir");
+        let host_home_path = dirs::home_dir().with_context(|| "cannot get home directory path")?;
         let host_home = host_home_path.to_str().unwrap();
         cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
     }
@@ -128,8 +125,8 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
     // make RHEL subscriptions work
     let rhel_sub_files: Vec<_> = vec![
         ("/etc/pki/entitlement/", "/run/secrets/etc-pki-entitlement"),
-		("/etc/rhsm/", "/run/secrets/rhsm"),
-		("/etc/yum.repos.d/redhat.repo", "/run/secrets/redhat.repo"),
+        ("/etc/rhsm/", "/run/secrets/rhsm"),
+        ("/etc/yum.repos.d/redhat.repo", "/run/secrets/redhat.repo"),
     ];
 
     for (host_path, container_path) in rhel_sub_files {
@@ -228,7 +225,7 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
         if cmd_args.home_prefix {
             // place it in ~/<PREFIX>/<CONTAINER_NAME>
             // NOTE: if prefix is absolute path then it will overwrite the home
-            new_home.push(std::env::var(env_vars::LM_HOME_PREFIX).unwrap_or(DEFAULT_HOME_PREFIX.into()));
+            new_home.push(std::env::var(env_vars::LM_HOME_PREFIX).unwrap_or(env_vars::LM_HOME_PREFIX_DEFAULT.into()));
             new_home.push(&cmd_args.container_name);
         }
 
@@ -242,10 +239,10 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
     let home_path = Path::new(cmd_args.home.as_ref().unwrap());
     if !home_path.exists() {
         // create the home path
-        std::fs::create_dir(home_path).expect("cannot create a directory");
+        std::fs::create_dir(home_path).with_context(|| format!("cannot create home directory at '{}'", home_path.to_str().unwrap_or("NONE".into())));
     }
 
-    let output = generate_create_command(args, &cmd_args).expect("failed to generate podman create command");
+    let output = generate_create_command(args, &cmd_args).with_context(|| "failed to generate podman create command")?;
 
     if args.verbose >= 1 {
         println!("Creating container {}", &cmd_args.container_name);
@@ -254,16 +251,23 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
     let command = Command::new(args.manager.unwrap().get_executable_name())
         .args(output)
         .output()
-        .expect("failed to execute container manager");
+        .with_context(|| format!("failed to execute manager '{:?}'", args.manager.unwrap()))?;
+        // .expect("failed to execute container manager");
 
     if command.status.success() {
         if args.verbose >= 1 {
             println!("Container successfully created");
         }
-    } else {
-        return Err(Error::msg(format!("Container creation failed:\n{}\n{}", String::from_utf8(command.stdout).unwrap(), String::from_utf8(command.stderr).unwrap())));
-    }
 
-    Ok(())
+        Ok(())
+    } else {
+        // TODO add stdout and stderr together it will be nicer looking
+        Err(Error::msg(
+            format!("Container creation failed:\nStdout: {}\n\nStderr: {}",
+                String::from_utf8(command.stdout).unwrap(),
+                String::from_utf8(command.stderr).unwrap()
+            )
+        ))
+    }
 }
 

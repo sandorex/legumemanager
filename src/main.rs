@@ -3,8 +3,9 @@ mod cli_host;
 mod cli_container;
 mod env_vars;
 
+pub use anyhow::{Error, Result, Context};
+
 use std::path::Path;
-use anyhow::Result;
 
 pub const VERSION: &'static str = concat!(env!("CARGO_PKG_VERSION_MAJOR"), env!("CARGO_PKG_VERSION_MINOR"), env!("CARGO_PKG_VERSION_PATCH"));
 pub const VERSION_STR: &'static str = env!("CARGO_PKG_VERSION");

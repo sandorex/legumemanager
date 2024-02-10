@@ -1,7 +1,7 @@
 use clap::Parser;
 use super::cli::{Cli, CliCommands, ContainerManager};
 use super::commands;
-use anyhow::Result;
+use crate::Result;
 
 pub fn main() -> Result<()> {
     let mut args = Cli::parse();
@@ -19,13 +19,8 @@ pub fn main() -> Result<()> {
     println!("host {:?}", args);
 
     match &args.cmd {
-        CliCommands::Create(cmd_args) => {
-            commands::cmd_create(&args, cmd_args.clone())
-        },
-        CliCommands::Shell(cmd_args) => {
-            Ok(())
-            // commands::cmd_shell(&args, &cmd_args);
-        }
+        CliCommands::Create(cmd_args) => commands::cmd_create(&args, cmd_args.clone()),
+        CliCommands::Shell(cmd_args) => commands::cmd_shell(&args, cmd_args.clone()),
         _ => Ok(()),
     }
 

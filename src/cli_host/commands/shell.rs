@@ -1,17 +1,10 @@
 //! Module contains shell command
 
 use crate::cli_host::cli::ContainerManager;
+use crate::cli_host::util;
+use crate::{Result, Context, Error};
 use super::super::cli::{Cli, CmdShellArgs};
-
-// pub struct EnterArgs<'a> {
-//     pub manager: ContainerManager,
-//     pub name: &'a str,
-//     pub home: &'a str,
-//     pub headless: bool,
-//     pub workdir: Option<&'a str>,
-//     pub command: Option<&'a str>,
-//     pub extra_env: Vec<(&'a str, &'a str)>,
-// }
+use serde_json;
 
 fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) -> Result<Vec<String>, String> {
     // TODO filter the env better and allow some useful vars like DISPLAY etc
@@ -62,11 +55,25 @@ fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) ->
     Ok(cmd)
 }
 
-pub fn cmd_shell(args: &Cli, mut cmd_args: CmdShellArgs) {
-    // TODO get home for the container, maybe podman inspect?
-    // if cmd_args.workdir.is_none() {
-    //     // TODO set workdir here to home if not set already
-    //     cmd_args.workdir = Some(home);
-    // }
+pub fn cmd_shell(args: &Cli, mut cmd_args: CmdShellArgs) -> Result<()> {
+    // check if container already exists
+    let state = util::get_container_state(args.manager.as_ref().unwrap(), &cmd_args.container_name)?;
+    if state.is_none() {
+        return Err(Error::msg(format!("container '{}' does not exist", &cmd_args.container_name)));
+    }
+
+    let env_vars = util::get_container_env(args.manager.as_ref().unwrap(), &cmd_args.container_name)?
+        .with_context(|| format!("could not inspect env variables of container '{}'", &cmd_args.container_name))?;
+
+    let home = env_vars.get("HOME").with_context(|| format!("could not inspect HOME variable from container '{}'", &cmd_args.container_name))?;
+
+    // default workdir to home
+    if cmd_args.workdir.is_none() {
+        cmd_args.workdir = Some(home.clone().into());
+    }
+
+    println!("{:?}", cmd_args);
+    Ok(())
+    // generate_shell_command(args, &cmd_args, &home);
 }
 
