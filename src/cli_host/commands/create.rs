@@ -1,10 +1,11 @@
 //! Module that contains create command
 
-use std::io::{self, Write};
 use std::process::Command;
 use std::path::Path;
+use crate::cli_host::util;
 use crate::{env_vars, VERSION, VERSION_STR};
 use crate::cli_host::cli::{Cli, CmdCreateArgs, ContainerManager};
+use anyhow::{Error, Result};
 
 /// This is the default prefix, will be appended to actual host home
 const DEFAULT_HOME_PREFIX: &'static str = ".lm";
@@ -200,8 +201,12 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
     Ok(cmd)
 }
 
-pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) {
-    // TODO check if container already exists
+pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
+    // check if container already exists
+    let state = util::get_container_state(args.manager.as_ref().unwrap(), &cmd_args.container_name)?;
+    if state.is_some() {
+        return Err(Error::msg(format!("container '{}' already exists", &cmd_args.container_name)));
+    }
 
     // hostname defaults to host's hostname
     if cmd_args.hostname.is_none() {
@@ -256,11 +261,9 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) {
             println!("Container successfully created");
         }
     } else {
-        // TODO write the error a bit more nicer
-        println!("Container creation failed:");
-        io::stdout().write_all(&command.stdout).unwrap();
-        println!();
-        io::stderr().write_all(&command.stderr).unwrap();
+        return Err(Error::msg(format!("Container creation failed:\n{}\n{}", String::from_utf8(command.stdout).unwrap(), String::from_utf8(command.stderr).unwrap())));
     }
+
+    Ok(())
 }
 

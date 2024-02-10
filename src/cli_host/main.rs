@@ -1,8 +1,9 @@
 use clap::Parser;
 use super::cli::{Cli, CliCommands, ContainerManager};
 use super::commands;
+use anyhow::Result;
 
-pub fn main() {
+pub fn main() -> Result<()> {
     let mut args = Cli::parse();
 
     // set the manager now so its less complicated later on
@@ -19,12 +20,13 @@ pub fn main() {
 
     match &args.cmd {
         CliCommands::Create(cmd_args) => {
-            commands::cmd_create(&args, cmd_args.clone());
+            commands::cmd_create(&args, cmd_args.clone())
         },
         CliCommands::Shell(cmd_args) => {
+            Ok(())
             // commands::cmd_shell(&args, &cmd_args);
         }
-        _ => {},
+        _ => Ok(()),
     }
 
     // use clap::CommandFactory;

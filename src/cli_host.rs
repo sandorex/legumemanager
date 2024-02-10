@@ -3,6 +3,7 @@
 mod cli_ansible;
 mod cli;
 mod commands;
+mod util;
 mod main;
 
 pub use main::main;

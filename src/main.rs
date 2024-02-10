@@ -4,11 +4,12 @@ mod cli_container;
 mod env_vars;
 
 use std::path::Path;
+use anyhow::Result;
 
 pub const VERSION: &'static str = concat!(env!("CARGO_PKG_VERSION_MAJOR"), env!("CARGO_PKG_VERSION_MINOR"), env!("CARGO_PKG_VERSION_PATCH"));
 pub const VERSION_STR: &'static str = env!("CARGO_PKG_VERSION");
 
-fn main() {
+fn main() -> Result<()> {
     let force_host = if cfg!(debug_assertions) {
         let value = std::env::var(env_vars::LM_FORCE_HOST).is_ok();
 
@@ -27,7 +28,9 @@ fn main() {
         && !force_host {
         // running in a container
         cli_container::main();
+
+        Ok(())
     } else {
-        cli_host::main();
+        cli_host::main()
     }
 }
