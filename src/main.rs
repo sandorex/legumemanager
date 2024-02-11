@@ -1,4 +1,5 @@
 mod util;
+mod manager;
 mod cli_host;
 mod cli_container;
 mod env_vars;
@@ -28,9 +29,7 @@ fn main() -> Result<()> {
         || std::env::var("container").is_ok())
         && !force_host {
         // running in a container
-        cli_container::main();
-
-        Ok(())
+        cli_container::main()
     } else {
         cli_host::main()
     }

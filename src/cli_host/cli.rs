@@ -1,6 +1,7 @@
-use clap::{Parser, Subcommand, Args, ArgAction, ValueEnum};
-use crate::util;
+use clap::{Parser, Subcommand, Args, ArgAction};
 use crate::cli_host::cli_ansible::AnsibleCommands;
+
+pub use crate::manager::ContainerManager;
 
 /// Podman wrapper for managing pet containers, focused towards automated container setup without
 /// using dedicated images
@@ -25,45 +26,6 @@ pub struct Cli {
 
     #[command(subcommand)]
     pub cmd: CliCommands,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum ContainerManager {
-    /// Use podman
-    Podman,
-
-    /// Use docker
-    Docker,
-
-    /// Use Lilypod
-    Lilypod,
-}
-
-impl ContainerManager {
-    /// Finds first available container manager in PATH, () if not found
-    pub fn find_available() -> Result<Self, ()> {
-        for manager in [
-            ContainerManager::Podman,
-            ContainerManager::Docker,
-            ContainerManager::Lilypod,
-        ] {
-            let name = manager.get_executable_name();
-            if util::executable_exists(name) {
-                return Ok(manager);
-            }
-        }
-
-        Err(())
-    }
-
-    /// Returns executable name of the container manager
-    pub fn get_executable_name(&self) -> &'static str {
-        match *self {
-            ContainerManager::Podman => "podman",
-            ContainerManager::Docker => "docker",
-            ContainerManager::Lilypod => "lilypod",
-        }
-    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -94,6 +56,7 @@ pub enum CliCommands {
 
     /// Stop and delete a container
     #[command(arg_required_else_help = true)]
+    #[clap(visible_alias = "rm")]
     Destroy(CmdDestroyArgs),
 
     /// Special commands for use with ansible

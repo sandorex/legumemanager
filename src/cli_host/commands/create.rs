@@ -46,6 +46,8 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
     cmd.extend([
         // information about the manager, kinda compatible with distrobox
         "--label".into(), "manager=legumemanager".into(),
+        // TODO add these to env_vars
+        "--env".into(), format!("manager_used={}",  manager.get_executable_name()),
         "--env".into(), format!("manager_version={}",  VERSION),
         "--env".into(), format!("manager_version_str={}",  VERSION_STR),
         "--env".into(), format!("container={}", manager.get_executable_name()),
@@ -239,7 +241,8 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
     let home_path = Path::new(cmd_args.home.as_ref().unwrap());
     if !home_path.exists() {
         // create the home path
-        std::fs::create_dir(home_path).with_context(|| format!("cannot create home directory at '{}'", home_path.to_str().unwrap_or("NONE".into())));
+        std::fs::create_dir(home_path)
+            .with_context(|| format!("cannot create home directory at '{}'", home_path.to_str().unwrap_or("NONE".into())))?;
     }
 
     let output = generate_create_command(args, &cmd_args).with_context(|| "failed to generate podman create command")?;

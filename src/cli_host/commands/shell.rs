@@ -4,9 +4,8 @@ use crate::cli_host::cli::ContainerManager;
 use crate::cli_host::util;
 use crate::{Result, Context, Error};
 use super::super::cli::{Cli, CmdShellArgs};
-use serde_json;
 
-fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) -> Result<Vec<String>, String> {
+fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) -> Result<Vec<String>> {
     // TODO filter the env better and allow some useful vars like DISPLAY etc
     let mut cmd: Vec<String> = vec![
         "exec".into(),
@@ -40,7 +39,7 @@ fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) ->
 
     cmd.push(cmd_args.container_name.clone());
 
-    let user_id = users::get_current_username().expect("could not get host username").into_string().unwrap();
+    let user_id = users::get_current_username().with_context(|| "could not get host username")?.into_string().unwrap();
 
     if cmd_args.login {
         cmd.extend([
@@ -56,6 +55,8 @@ fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) ->
 }
 
 pub fn cmd_shell(args: &Cli, mut cmd_args: CmdShellArgs) -> Result<()> {
+    // TODO start the container if not running already?
+
     // check if container already exists
     let state = util::get_container_state(args.manager.as_ref().unwrap(), &cmd_args.container_name)?;
     if state.is_none() {
@@ -72,8 +73,9 @@ pub fn cmd_shell(args: &Cli, mut cmd_args: CmdShellArgs) -> Result<()> {
         cmd_args.workdir = Some(home.clone().into());
     }
 
-    println!("{:?}", cmd_args);
+    let cmd = generate_shell_command(args, &cmd_args, &home)?;
+    println!("{:?}", cmd);
+
     Ok(())
-    // generate_shell_command(args, &cmd_args, &home);
 }
 
