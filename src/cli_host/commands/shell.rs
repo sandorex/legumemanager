@@ -74,7 +74,17 @@ pub fn cmd_shell(args: &Cli, mut cmd_args: CmdShellArgs) -> Result<()> {
     }
 
     let cmd = generate_shell_command(args, &cmd_args, &home)?;
-    println!("{:?}", cmd);
+
+    if args.dry_run {
+        print!("{}", args.manager.unwrap().get_executable_name());
+        for arg in cmd {
+            print!(" {}", arg);
+        }
+        println!();
+        return Ok(());
+    }
+
+    // TODO run command
 
     Ok(())
 }

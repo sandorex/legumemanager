@@ -16,6 +16,10 @@ pub struct Cli {
     #[arg(short, long, conflicts_with = "verbose")]
     pub quiet: bool,
 
+    /// Output the command and quit
+    #[arg(long)]
+    pub dry_run: bool,
+
     /// Run container manager as root (uses sudo or doas)
     #[arg(long)]
     pub root: bool,

@@ -245,7 +245,17 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
             .with_context(|| format!("cannot create home directory at '{}'", home_path.to_str().unwrap_or("NONE".into())))?;
     }
 
-    let output = generate_create_command(args, &cmd_args).with_context(|| "failed to generate podman create command")?;
+    let output = generate_create_command(args, &cmd_args)
+        .with_context(|| "failed to generate podman create command")?;
+
+    if args.dry_run {
+        print!("{}", args.manager.unwrap().get_executable_name());
+        for arg in output {
+            print!(" {}", arg);
+        }
+        println!();
+        return Ok(());
+    }
 
     if args.verbose >= 1 {
         println!("Creating container {}", &cmd_args.container_name);
@@ -255,7 +265,6 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
         .args(output)
         .output()
         .with_context(|| format!("failed to execute manager '{:?}'", args.manager.unwrap()))?;
-        // .expect("failed to execute container manager");
 
     if command.status.success() {
         if args.verbose >= 1 {

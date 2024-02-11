@@ -16,8 +16,6 @@ pub fn main() -> Result<()> {
         args.verbose = 0;
     }
 
-    println!("host {:?}", args);
-
     match &args.cmd {
         CliCommands::Create(cmd_args) => commands::cmd_create(&args, cmd_args.clone()),
         CliCommands::Shell(cmd_args) => commands::cmd_shell(&args, cmd_args.clone()),
