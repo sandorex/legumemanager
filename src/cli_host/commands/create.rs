@@ -57,24 +57,17 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
         "--env".into(), format!("HOME={}", home),
 
         // use host terminfo as fallback, useful for modern terminals like kitty
-        "--env".into(), "TERMINFO_DIRS=/usr/share/terminfo:/usr/share/terminfo-host".into(),
-        "--volume".into(), "/usr/share/terminfo:/usr/share/terminfo-host:ro".into(),
-
+        "--env".into(), "TERMINFO_DIRS=/usr/share/terminfo:/run/host/usr/share/terminfo".into(),
+        "--volume".into(), "/:/run/host:rslave".into(),
         "--volume".into(), format!("{0}:{0}:rslave", home),
         "--volume".into(), "/tmp:/tmp:rslave".into(),
     ]);
 
     // TODO mount /var/home/xxx for ostree systems
 
-    if cmd_args.mount_host {
-        cmd.extend(["--volume".into(), "/:/run/host:rslave".into()]);
-
-        // TODO make HOME_HOST be /run/host/home/... so it works always
-        // HOME_HOST is gonna be undefined if host is not mounted
-        let host_home_path = dirs::home_dir().with_context(|| "cannot get home directory path")?;
-        let host_home = host_home_path.to_str().unwrap();
-        cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
-    }
+    let host_home_path = dirs::home_dir().with_context(|| "cannot get home directory path")?;
+    let host_home = host_home_path.to_str().unwrap();
+    cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
 
     if !cmd_args.unshare_devsys {
         cmd.extend([

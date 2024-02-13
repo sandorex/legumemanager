@@ -6,7 +6,6 @@ pub use crate::manager::ContainerManager;
 
 /// Podman wrapper for managing pet containers, focused towards automated container setup without
 /// using dedicated images
-/// CONTAINER INTERFACE
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None, arg_required_else_help = true)]
 pub struct Cli {

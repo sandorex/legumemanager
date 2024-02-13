@@ -47,7 +47,7 @@ pub enum CliCommands {
     #[command(arg_required_else_help = true)]
     Exec(CmdExecArgs),
 
-    /// List all container made by legumemanager and their status
+    /// List all containers made by legumemanager and their status
     List(CmdListArgs),
 
     /// Start a container
@@ -88,10 +88,6 @@ pub struct CmdCreateArgs {
     #[arg(short = 'P', long)]
     pub home_prefix: bool,
 
-    /// Do not mount host filesystem inside container (at /run/host)
-    #[arg(long = "no-host-mount", action = clap::ArgAction::SetFalse, default_value_t = true)]
-    pub mount_host: bool,
-
     /// Isolate IPC namespace
     #[arg(long)]
     pub unshare_ipc: bool,
@@ -122,31 +118,6 @@ pub struct CmdCreateArgs {
 }
 
 #[derive(Args, Debug, Clone)]
-pub struct CmdExecArgs {
-    /// Name of the container
-    pub container_name: String,
-
-    /// Command to execute
-    pub command: Vec<String>,
-
-    /// Use login shell
-    #[arg(short, long)]
-    pub login: bool,
-
-    /// Set current working directory in the container
-    #[arg(short, long)]
-    pub workdir: Option<String>,
-
-    /// Define extra environment variables in container (eg. 'MY_VAR=value')
-    #[arg(short, long)]
-    pub env: Vec<String>,
-
-    /// Pass extra arguments verbatim to container manager
-    #[arg(short = 'a', long = "extra-arg")]
-    pub extra_args: Vec<String>,
-}
-
-#[derive(Args, Debug, Clone)]
 pub struct CmdShellArgs {
     /// Name of the container
     pub container_name: String,
@@ -162,6 +133,31 @@ pub struct CmdShellArgs {
     /// Run in headless mode (no tty)
     #[arg(long)]
     pub headless: bool,
+
+    /// Define extra environment variables in container (eg. 'MY_VAR=value')
+    #[arg(short, long)]
+    pub env: Vec<String>,
+
+    /// Pass extra arguments verbatim to container manager
+    #[arg(short = 'a', long = "extra-arg")]
+    pub extra_args: Vec<String>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct CmdExecArgs {
+    /// Name of the container
+    pub container_name: String,
+
+    /// Command to execute
+    pub command: Vec<String>,
+
+    /// Use login shell
+    #[arg(short, long)]
+    pub login: bool,
+
+    /// Set current working directory in the container
+    #[arg(short, long)]
+    pub workdir: Option<String>,
 
     /// Define extra environment variables in container (eg. 'MY_VAR=value')
     #[arg(short, long)]
