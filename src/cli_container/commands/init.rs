@@ -3,23 +3,26 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::process::Command;
+use std::os::unix::fs::symlink;
 use super::super::cli::{Cli, ContainerManager};
-use crate::{Result, Context, Error};
+use crate::{util, Context, Error, Result};
 use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct FindMntFilesystem {
-    target: String,
-    options: String,
-}
-
-#[derive(Deserialize)]
-struct FindMntResult {
-    filesystems: Vec<FindMntFilesystem>,
-}
 
 fn get_locked_mount_flags(path: &str) -> Option<Vec<String>> {
     // NOTE this may fail on older versions of findmnt
+
+    #[derive(Deserialize)]
+    struct FindMntFilesystem {
+        target: String,
+        options: String,
+    }
+
+    /// Structure returned by findmnt command when using --json argument
+    #[derive(Deserialize)]
+    struct FindMntResult {
+        filesystems: Vec<FindMntFilesystem>,
+    }
+
 
     let output = Command::new("findmnt")
         .args(["--json", "--target", path])
@@ -54,7 +57,7 @@ fn get_locked_mount_flags(path: &str) -> Option<Vec<String>> {
     panic!("failed to parse findmnt output");
 }
 
-fn mount(source: &str, mountpoint: &str, flags: Option<Vec<String>>) -> Result<()> {
+fn bind_mount(source: &str, mountpoint: &str, flags: Vec<String>) -> Result<()> {
     let mut source_path = PathBuf::from(source);
 
     // if its a link
@@ -128,7 +131,11 @@ fn mount(source: &str, mountpoint: &str, flags: Option<Vec<String>>) -> Result<(
     }
 
     // default flags to rslave
-    let mount_flags = flags.unwrap_or(vec!["rslave".into()]);
+    let mount_flags = if flags.len() > 0 {
+        flags
+    } else {
+        vec!["rslave".into()]
+    };
 
     let result = Command::new("mount")
         .args(["--rbind", "-o", &mount_flags.join(","), source_path.as_path().to_str().unwrap(), mountpoint])
@@ -142,6 +149,92 @@ fn mount(source: &str, mountpoint: &str, flags: Option<Vec<String>>) -> Result<(
     Ok(())
 }
 
+/// Calls mount command and checks for success generating a clearer error messages on failure
+fn mount(args: Vec<&'static str>) -> Result<()> {
+    let result = Command::new("mount")
+        .args(&args)
+        .output()
+        .with_context(|| "failed to execute mount")?;
+
+    if !result.status.success() {
+        return Err(Error::msg(format!("failed to execute 'mount {}'", args.join(" "))));
+    }
+
+    Ok(())
+}
+
 pub fn cmd_init(args: &Cli, manager: &ContainerManager) -> Result<()> {
+    if args.verbose >= 1 {
+        println!("Downloading host-spawn");
+    }
+    // 1. download host-spawn
+
+    // NOTE: disabled until legumemanager symlinking works
+    // if !util::executable_exists("xdg-open") {
+    //     if args.verbose >= 1 {
+    //         println!("Setting up xdg-open");
+    //     }
+    //     // i do not care if it fails
+    //     let _ = fs::create_dir_all("/usr/local/bin/");
+    //     // TODO does spawn-host work directly like this? add this functionality to legumemanager
+    //     // and then add this
+    //     symlink("/usr/bin/spawn-host", "/usr/local/bin/xdg-open")
+    // }
+
+    if args.verbose >= 1 {
+        println!("Setting up mounts");
+    }
+
+    mount(vec!["-t", "devpts", "devpts", "-o", "noexec,nosuid,newinstance,ptmxmode=0666,mode=0620", "/dev/pts/"])?;
+
+    mount(vec!["--bind", "/dev/pts/ptmx", "/dev/ptmx"])?;
+
+    mount(vec!["--make-rshared", "/"])?;
+
+    // RO mounts
+    for i in [
+        "/etc/localtime",
+        "/var/lib/systemd/coredump",
+        "/var/log/journal",
+    ] {
+        let path = format!("/run/host{}", i);
+        let flags = get_locked_mount_flags(&path)
+            .context(format!("could not get mount flags for {}", &path))?;
+
+        bind_mount(&i, path.as_str(), flags)?;
+    }
+
+    // TODO get user name and mount for ostree systems
+    // if Path::new("/var/home/USER").exists() {
+    //     bind_mount("/run/host/var/home/USER", "/home/USER")?;
+    // }
+
+    // RW mounts
+    for i in [
+        "/etc/host.conf",
+        "/etc/machine-id",
+        "/media",
+        "/mnt",
+        "/run/libvirt",
+        "/run/media",
+        "/run/netconfig/",
+        "/run/systemd/journal",
+        "/run/systemd/resolve/",
+        "/run/systemd/seats",
+        "/run/systemd/sessions",
+        "/run/systemd/users",
+        "/run/udev",
+        "/var/lib/libvirt",
+        "/var/mnt",
+    ] {
+        let path = format!("/run/host{}", i);
+        let flags = get_locked_mount_flags(&path)
+            .context(format!("could not get mount flags for {}", &path))?;
+
+        bind_mount(&i, path.as_str(), flags)?;
+    }
+
+    // TODO find sockets
+
     Ok(())
 }
