@@ -3,9 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::process::Command;
-use std::os::unix::fs::symlink;
 use super::super::cli::{Cli, ContainerManager};
-use crate::{util, Context, Error, Result};
+use crate::{Context, Error, Result};
 use serde::Deserialize;
 
 fn get_locked_mount_flags(path: &str) -> Option<Vec<String>> {
@@ -167,19 +166,8 @@ pub fn cmd_init(args: &Cli, manager: &ContainerManager) -> Result<()> {
     if args.verbose >= 1 {
         println!("Downloading host-spawn");
     }
-    // 1. download host-spawn
 
-    // NOTE: disabled until legumemanager symlinking works
-    // if !util::executable_exists("xdg-open") {
-    //     if args.verbose >= 1 {
-    //         println!("Setting up xdg-open");
-    //     }
-    //     // i do not care if it fails
-    //     let _ = fs::create_dir_all("/usr/local/bin/");
-    //     // TODO does spawn-host work directly like this? add this functionality to legumemanager
-    //     // and then add this
-    //     symlink("/usr/bin/spawn-host", "/usr/local/bin/xdg-open")
-    // }
+    // TODO move all of to host
 
     if args.verbose >= 1 {
         println!("Setting up mounts");

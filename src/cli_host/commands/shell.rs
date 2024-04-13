@@ -6,6 +6,7 @@ use crate::{Result, Context, Error};
 use super::super::cli::{Cli, CmdShellArgs};
 
 fn generate_shell_command(args: &Cli, cmd_args: &CmdShellArgs, home: &String) -> Result<Vec<String>> {
+    // TODO move all of this into /init.sh script
     // TODO filter the env better and allow some useful vars like DISPLAY etc
     let mut cmd: Vec<String> = vec![
         "exec".into(),

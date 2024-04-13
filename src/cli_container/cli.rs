@@ -17,13 +17,8 @@ pub struct Cli {
     #[arg(short, long, conflicts_with = "verbose")]
     pub quiet: bool,
 
-    /// Subcommand to use (if omitted defaults to host-exec)
     #[command(subcommand)]
-    pub cmd: Option<CliCommands>,
-
-    /// Execute command verbatim on host
-    #[arg(last = true)]
-    pub host_exec: Vec<String>,
+    pub cmd: CliCommands,
 }
 
 #[derive(Subcommand, Debug)]

@@ -1,10 +1,9 @@
 use clap::{Parser, Subcommand, Args, ArgAction};
-use crate::cli_host::cli_ansible::AnsibleCommands;
+use std::path::PathBuf;
 
 pub use crate::manager::ContainerManager;
 
-/// Podman wrapper for managing pet containers, focused towards automated container setup without
-/// using dedicated images
+/// Podman wrapper for managing pet containers, get VM like experience using containers
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
@@ -12,7 +11,7 @@ pub struct Cli {
     #[arg(short, action = ArgAction::Count, default_value_t = 1)]
     pub verbose: u8,
 
-    /// Set verbosity (sets verbosity to 0)
+    /// No logging at all (sets verbosity to 0)
     #[arg(short, long, conflicts_with = "verbose")]
     pub quiet: bool,
 
@@ -24,7 +23,7 @@ pub struct Cli {
     #[arg(long)]
     pub root: bool,
 
-    /// Specify which container manager to use (by defaults uses first one found)
+    /// Specify which container manager to use (by default uses first one found)
     #[arg(long, value_enum)]
     pub manager: Option<ContainerManager>,
 
@@ -48,6 +47,7 @@ pub enum CliCommands {
     Exec(CmdExecArgs),
 
     /// List all containers made by legumemanager and their status
+    #[command(visible_alias = "ls")]
     List(CmdListArgs),
 
     /// Start a container
@@ -63,13 +63,59 @@ pub enum CliCommands {
     #[clap(visible_alias = "rm")]
     Destroy(CmdDestroyArgs),
 
-    /// Special commands for use with ansible
-    #[command(subcommand)]
-    Ansible(AnsibleCommands),
+    /// Run ansible playbook inside container
+    #[command(arg_required_else_help = true)]
+    Ansible {
+        /// Name of the container
+        container_name: String,
+
+        /// Path to playbook.yml
+        playbook_path: PathBuf,
+
+        // TODO add extra arguments which are passed to ansible-playbook itself
+    },
+
+    /// Get container status
+    #[command(arg_required_else_help = true)]
+    Status {
+        /// Name of the container
+        container_name: String,
+
+        /// Return status as JSON formatted string
+        #[arg(short, long)]
+        json: bool,
+    },
+
+    /// Push files to a container
+    #[command(arg_required_else_help = true)]
+    Push {
+        /// Name of the container
+        container_name: String,
+
+        /// Source on host
+        source: PathBuf,
+
+        /// Destination in the container
+        destination: PathBuf,
+    },
+
+    /// Fetch files from a container
+    #[command(arg_required_else_help = true)]
+    Pull {
+        /// Name of the container
+        container_name: String,
+
+        /// Source on host
+        source: PathBuf,
+
+        /// Destination in the container
+        destination: PathBuf,
+    },
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct CmdCreateArgs {
+    // TODO allow podman to generate the name of container and just return it
     /// Name of the new container
     pub container_name: String,
 
@@ -80,6 +126,8 @@ pub struct CmdCreateArgs {
     #[arg(short = 'H', long)]
     pub hostname: Option<String>,
 
+    // TODO make it so default is ~/.lm/<container-name>-<container-image>
+    // TODO make it so relative path is a suffix in ~/.lm/
     /// Home path for user inside the container (defaults to host home)
     #[arg(long)]
     pub home: Option<String>,
@@ -87,22 +135,6 @@ pub struct CmdCreateArgs {
     /// If enabled home is set as home prefix, if home is not set then default prefix will be used
     #[arg(short = 'P', long)]
     pub home_prefix: bool,
-
-    /// Isolate IPC namespace
-    #[arg(long)]
-    pub unshare_ipc: bool,
-
-    /// Isolate network namespace
-    #[arg(long)]
-    pub unshare_netns: bool,
-
-    /// Isolate process namespace
-    #[arg(long)]
-    pub unshare_process: bool,
-
-    /// Isolate /dev (host devices)
-    #[arg(long)]
-    pub unshare_devsys: bool,
 
     /// Use init system inside container (eg. systemd)
     #[arg(long)]
@@ -198,6 +230,6 @@ pub struct CmdDestroyArgs {
 
     /// Do not ask for confirmation
     #[arg(long)]
-    pub no_confirm: bool,
+    pub force: bool,
 }
 

@@ -1,6 +1,6 @@
-use std::process::Command;
+use std::{path::PathBuf, process::Command};
 use super::cli::ContainerManager;
-use anyhow::{Context, Result};
+use crate::{Context, Error, Result};
 use std::collections::HashMap;
 
 /// Inspects container and returns json, if container does not exist it will return None
@@ -45,3 +45,40 @@ pub fn get_container_env(manager: &ContainerManager, container_name: &str) -> Re
         Ok(None)
     }
 }
+
+/// Pushes the binary into container
+pub fn push_executable_into_container(manager: &ContainerManager, container_name: &str, path: PathBuf) -> Result<()> {
+    let manager_exe = manager.get_executable_name();
+
+    // i am only testing if the container exists
+    match get_container_state(manager, container_name) {
+        // the container exists
+        Ok(Some(_)) => {
+            match std::env::current_exe() {
+                Ok(current_exe) => {
+                    let status = Command::new(manager_exe)
+                        .args(["container", "cp", current_exe.to_str().expect("error converting current_exe to &str"), format!("{}:/lm", container_name).as_str()])
+                        .status()
+                        .with_context(|| format!("unable to execute manager '{}'", manager_exe))?;
+
+                    if status.success() {
+                        Ok(())
+                    } else {
+                        Err(Error::msg(format!("Failed to copy executable into container '{}'", container_name)))
+                    }
+                }
+                Err(err) => Err(err.into()),
+            }
+        },
+
+        // the container does not exist
+        Ok(None) => Err(Error::msg(format!("Container '{}' does not exist", container_name))),
+
+        // Some kind of error happen
+        Err(err) => Err(err),
+    }
+}
+
+// TODO create is_owned_container() to check if the container is made by legumemanager, forbid
+// using it for foreign containers to avoid problems
+

@@ -7,9 +7,6 @@ pub enum ContainerManager {
 
     /// Use docker
     Docker,
-
-    /// Use Lilypod
-    Lilypod,
 }
 
 impl ContainerManager {
@@ -18,7 +15,6 @@ impl ContainerManager {
         for manager in [
             ContainerManager::Podman,
             ContainerManager::Docker,
-            ContainerManager::Lilypod,
         ] {
             let name = manager.get_executable_name();
             if util::executable_exists(name) {
@@ -34,7 +30,6 @@ impl ContainerManager {
         match *self {
             ContainerManager::Podman => "podman",
             ContainerManager::Docker => "docker",
-            ContainerManager::Lilypod => "lilypod",
         }
     }
 
@@ -43,7 +38,6 @@ impl ContainerManager {
         match name {
             "podman" => Some(ContainerManager::Podman),
             "docker" => Some(ContainerManager::Docker),
-            "lilypod" => Some(ContainerManager::Lilypod),
             _ => None,
         }
     }

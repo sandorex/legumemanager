@@ -2,8 +2,8 @@
 
 use std::process::Command;
 use std::path::Path;
-use crate::cli_host::util;
-use crate::{env_vars, VERSION, VERSION_STR};
+use super::super::util as host_util;
+use crate::{env_vars, util, VERSION, VERSION_STR};
 use crate::cli_host::cli::{Cli, CmdCreateArgs, ContainerManager};
 use crate::{Error, Result, Context};
 
@@ -25,23 +25,12 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
     cmd.extend(["create".into(),
         "--name".into(), cmd_args.container_name.clone(),
         "--hostname".into(), hostname.clone(),
-        "--privileged".into(),
+        // "--privileged".into(), // TODO find out what exactly it does
         "--security-opt".into(), "label=disable".into(),
         "--security-opt".into(), "apparmor=unconfined".into(),
         "--user".into(), "root:root".into(),
+        "--network".into(), "host".into(),
     ]);
-
-    if !cmd_args.unshare_ipc {
-        cmd.extend(["--ipc".into(), "host".into()]);
-    }
-
-    if !cmd_args.unshare_netns {
-        cmd.extend(["--network".into(), "host".into()]);
-    }
-
-    if !cmd_args.unshare_process {
-        cmd.extend(["--pid".into(), "host".into()]);
-    }
 
     cmd.extend([
         // information about the manager, kinda compatible with distrobox
@@ -57,23 +46,23 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
         "--env".into(), format!("HOME={}", home),
 
         // use host terminfo as fallback, useful for modern terminals like kitty
-        "--env".into(), "TERMINFO_DIRS=/usr/share/terminfo:/run/host/usr/share/terminfo".into(),
-        "--volume".into(), "/:/run/host:rslave".into(),
-        "--volume".into(), format!("{0}:{0}:rslave", home),
-        "--volume".into(), "/tmp:/tmp:rslave".into(),
+        "--env".into(), "TERMINFO_DIRS=/usr/share/terminfo:/run/host/usr/share/terminfo:/run/host/etc/terminfo:/run/host/usr/lib/terminfo".into(),
+        "--volume".into(), "/etc/terminfo:/run/host/etc/terminfo:ro".into(),
+        "--volume".into(), "/usr/lib/terminfo:/run/host/usr/lib/terminfo:ro".into(),
+        "--volume".into(), "/usr/share/terminfo:/run/host/usr/share/terminfo:ro".into(),
+
+        // TODO maybe move these into init so that it can be done depending on the container
+        // manager
+        // i do not know if all of these are needed but i guess wont hurt?
+        "--mount".into(), "type=tmpfs,destination=/tmp".into(),
+        "--mount".into(), "type=tmpfs,destination=/var/lib/journal".into(),
+        "--mount".into(), "type=tmpfs,destination=/run".into(),
+        "--mount".into(), "type=tmpfs,destination=/run/lock".into(),
     ]);
 
-    // TODO mount /var/home/xxx for ostree systems
-
-    let host_home_path = dirs::home_dir().with_context(|| "cannot get home directory path")?;
-    let host_home = host_home_path.to_str().unwrap();
-    cmd.extend(["--env".into(), format!("HOME_HOST={}", host_home)]);
-
-    if !cmd_args.unshare_devsys {
-        cmd.extend([
-            "--volume".into(), "/dev:/dev:rslave".into(),
-            "--volume".into(), "/sys:/sys:rslave".into(),
-        ]);
+    // for debian, see if /lib/terminfo exists
+    if Path::new("/lib/terminfo").exists() {
+        cmd.extend(["--volume".into(), "/run/host/lib/terminfo:ro".into()]);
     }
 
     // things for systemd
@@ -83,38 +72,9 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
                 cmd.push("--cgroupns".into());
             },
             ContainerManager::Podman => {
-                cmd.extend([
-                   "--stop-signal".into(), "SIGRTMIN+3".into(),
-                   "--mount".into(), "type=tmpfs,destination=/run".into(),
-                   "--mount".into(), "type=tmpfs,destination=/run/lock".into(),
-                   "--mount".into(), "type=tmpfs,destination=/var/lib/journal".into(),
-                ]);
+                cmd.extend(["--stop-signal".into(), "SIGRTMIN+3".into()]);
             },
-            _ => {},
         }
-    }
-
-    if !cmd_args.unshare_devsys {
-        cmd.extend([
-            "--volume".into(), "/dev/pts".into(),
-            "--volume".into(), "/dev/null:/dev/ptmx".into(),
-        ]);
-    }
-
-    // i think this is obselete as https://github.com/containers/podman/issues/4452
-    // has been solved
-    if Path::new("/sys/fs/selinux").exists() {
-        cmd.extend(["--volume".into(), "/sys/fs/selinux".into()]);
-    }
-
-    cmd.extend(["--volume".into(), "/var/log/journal".into()]);
-
-    let shm = Path::new("/dev/shm");
-    if shm.is_symlink() && !cmd_args.unshare_ipc {
-        let link_target = shm.read_link().expect("failed to read /dev/shm link");
-        cmd.extend([
-            "--volume".into(), format!("{target}:{target}", target=link_target.to_str().unwrap())
-        ]);
     }
 
     // make RHEL subscriptions work
@@ -132,28 +92,17 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
         }
     }
 
+    // TODO pass wayland i guess?
+    // TODO is this safe?
     // mount XDG_RUNTIME_DIR
-    let user_id = users::get_current_uid();
-    let user_xdg_runtime_path = format!("/run/user/{}", user_id);
-
-    if Path::new(&user_xdg_runtime_path).exists() && !cmd_args.init {
-        cmd.extend([
-            "--volume".into(), format!("{0}:{0}:rslave", user_xdg_runtime_path),
-        ])
-    }
-
-    // TODO i think there is a better way than just making these immutable
-    // TODO try editing when copying from host and editing a part, maybe also put some marker where
-    // user can edit whatever they want and it wont be overwritten
-    if !cmd_args.unshare_netns {
-        for file in ["/etc/hosts", "/etc/resolv.conf"] {
-            if Path::new(file).exists() {
-                cmd.extend([
-                   "--volume".into(), format!("{0}:{0}:ro", file),
-                ]);
-            }
-        }
-    }
+    // let user_id = users::get_current_uid(); // TODO is this crate really needed?
+    // let user_xdg_runtime_path = format!("/run/user/{}", user_id);
+    //
+    // if Path::new(&user_xdg_runtime_path).exists() && !cmd_args.init {
+    //     cmd.extend([
+    //         "--volume".into(), format!("{0}:{0}:rslave", user_xdg_runtime_path),
+    //     ])
+    // }
 
     if manager == ContainerManager::Podman {
         cmd.extend([
@@ -185,8 +134,8 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
     // im guessing this is the thing that gets called when the container starts
     // i want to support `podman start <container>` too for use with ansible
     cmd.extend([
-        // TODO run login shell
-        "--entrypoint".into(), "/bin/sh".into(),
+        // execute legumemanager init on startup
+        "--entrypoint".into(), r#"["/lm", "init"]"#.into(),
         cmd_args.image.clone().into(),
     ]);
 
@@ -195,7 +144,7 @@ fn generate_create_command(args: &Cli, cmd_args: &CmdCreateArgs) -> Result<Vec<S
 
 pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
     // check if container already exists
-    let state = util::get_container_state(args.manager.as_ref().unwrap(), &cmd_args.container_name)?;
+    let state = host_util::get_container_state(args.manager.as_ref().unwrap(), &cmd_args.container_name)?;
     if state.is_some() {
         return Err(Error::msg(format!("container '{}' already exists", &cmd_args.container_name)));
     }
@@ -260,6 +209,10 @@ pub fn cmd_create(args: &Cli, mut cmd_args: CmdCreateArgs) -> Result<()> {
         .with_context(|| format!("failed to execute manager '{:?}'", args.manager.unwrap()))?;
 
     if command.status.success() {
+        // push executable into the container
+        host_util::push_executable_into_container(args.manager.as_ref().unwrap(), &cmd_args.container_name, "/lm".into())
+            .with_context(|| format!("Failed to push executable into container '{}'", cmd_args.container_name))?;
+
         if args.verbose >= 1 {
             println!("Container successfully created");
         }

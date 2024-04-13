@@ -21,8 +21,7 @@ pub fn main() -> Result<()> {
         .context(format!("unsupported container manager '{}' used for container", &manager_used))?;
 
     match &args.cmd {
-        Some(CliCommands::Init) => commands::cmd_init(&args, &manager),
-        _ => commands::cmd_host_exec(&args, &manager),
+        CliCommands::Init => commands::cmd_init(&args, &manager),
     }
 }
 
