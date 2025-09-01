@@ -1,4 +1,6 @@
 # legumemanager
+**Superceeded by [arcam](https://github.com/sandorex/arcam)**
+
 WIP container manager written in rust, mainly intended for rootless containers but with more emphasis on automation with planned ansible support
 
 ## Compared to distrobox
